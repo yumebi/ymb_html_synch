@@ -13,6 +13,9 @@ const htmlDiff = require('./htmlDiff');
 
 const FETCH_TIMEOUT_MS = 15000;
 const CONCURRENCY = 4;
+const CRAWL_DEFAULT_LIMIT = 200; // リンククロールで新たにfetchするページ数の上限
+const SITEMAPINDEX_MAX_CHILDREN = 10; // sitemapindexから辿る子sitemapの上限
+const SITEMAPINDEX_MAX_DEPTH = 3; // 子sitemapがさらにsitemapindexだった場合の再帰上限
 
 // 直近のスキャンで取得したリモートテキストを保持する(relPath -> text)。
 // レンダラーへは表示用データ(hunks等)のみ渡し、巨大テキストの二重転送を避ける。
@@ -99,8 +102,56 @@ async function fetchRemoteText(url, authHeader, timeoutMs = FETCH_TIMEOUT_MS) {
   }
 }
 
-// origin直下とbaseUrl直下の2箇所を順に試してsitemap.xmlを取得し、<loc>のURL一覧を返す。
-// 両方失敗したらnullを返す(呼び出し側でスキップ扱いにする)。
+// origin直下のrobots.txtを取得し、"Sitemap:"行(大文字小文字無視)のURLを一覧で返す。
+// 取得に失敗した場合は空配列を返す(呼び出し側で無視する)。
+async function fetchRobotsSitemaps(origin, authHeader) {
+  try {
+    const text = await fetchRemoteText(origin + '/robots.txt', authHeader, FETCH_TIMEOUT_MS);
+    const urls = [];
+    const re = /^\s*sitemap\s*:\s*(\S+)\s*$/gim;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const url = m[1].trim();
+      if (url) urls.push(url);
+    }
+    return urls;
+  } catch (e) {
+    return [];
+  }
+}
+
+// sitemap XMLを1件取得して<loc>一覧を返す。<sitemapindex>形式の場合は子sitemapを
+// 順に辿って(最大SITEMAPINDEX_MAX_CHILDREN個、再帰深さSITEMAPINDEX_MAX_DEPTHまで)
+// 集約した<loc>一覧を返す。子sitemapの取得失敗は無視して他の子を続行する。
+async function fetchSitemapLocsFromXml(url, authHeader, depth = 0) {
+  const text = await fetchRemoteText(url, authHeader, FETCH_TIMEOUT_MS);
+  const locs = [];
+  const re = /<loc>(.*?)<\/loc>/gi;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const loc = m[1].trim();
+    if (loc) locs.push(loc);
+  }
+  if (/<sitemapindex[\s>]/i.test(text) && depth < SITEMAPINDEX_MAX_DEPTH) {
+    const childUrls = locs.slice(0, SITEMAPINDEX_MAX_CHILDREN);
+    const aggregated = [];
+    for (const childUrl of childUrls) {
+      try {
+        const childLocs = await fetchSitemapLocsFromXml(childUrl, authHeader, depth + 1);
+        aggregated.push(...childLocs);
+      } catch (e) {
+        // 子sitemapの取得失敗は無視して他の子を続行する
+      }
+    }
+    return aggregated;
+  }
+  return locs;
+}
+
+// sitemap候補を順に試して<loc>のURL一覧を返す。
+// 候補は「robots.txtのSitemap:行のURL」を先頭に、次いでorigin直下・baseUrl直下のsitemap.xmlを試す。
+// 最初に成功した候補の結果を採用する(sitemapindexなら子sitemapも辿った上で集約済み)。
+// すべて失敗したらnullを返す(呼び出し側でスキップ扱いにする)。
 async function fetchSitemapLocs(baseUrl, authHeader) {
   let origin;
   try {
@@ -108,23 +159,82 @@ async function fetchSitemapLocs(baseUrl, authHeader) {
   } catch (e) {
     return null;
   }
-  const candidates = Array.from(new Set([origin + '/sitemap.xml', htmlDiff.joinUrl(baseUrl, 'sitemap.xml')]));
+  const robotsSitemaps = await fetchRobotsSitemaps(origin, authHeader);
+  const candidates = Array.from(new Set([
+    ...robotsSitemaps,
+    origin + '/sitemap.xml',
+    htmlDiff.joinUrl(baseUrl, 'sitemap.xml'),
+  ]));
   for (const url of candidates) {
     try {
-      const text = await fetchRemoteText(url, authHeader, FETCH_TIMEOUT_MS);
-      const locs = [];
-      const re = /<loc>(.*?)<\/loc>/gi;
-      let m;
-      while ((m = re.exec(text)) !== null) {
-        const loc = m[1].trim();
-        if (loc) locs.push(loc);
-      }
-      return locs;
+      return await fetchSitemapLocsFromXml(url, authHeader);
     } catch (e) {
       // 次の候補を試す
     }
   }
   return null;
+}
+
+// リンクを辿って新規ページ(ローカルに無いページ)を検出する(BFS)。
+// シード(seedTexts: 既知ページのHTML群 + baseUrl自体)から<a href>を抽出し、baseUrl配下かつ
+// ローカル未存在・未発見のページのみfetch(同時CONCURRENCY件)。取得できたHTMLもさらにクロール対象に加える。
+// fetch試行数がcrawlLimitに達したら打ち切る(limitReached=trueを返す)。404等の失敗URLは結果に含めない。
+async function crawlForNewPages({ baseUrl, authHeader, localPathSet, foundRelPathSet, seedTexts, crawlLimit = CRAWL_DEFAULT_LIMIT }) {
+  const queue = [];
+  const queued = new Set(); // キュー投入済みrelPath(重複fetch防止)
+  const newPages = [];
+  let fetchCount = 0;
+  let limitReached = false;
+
+  function enqueueFromHtml(html, pageUrl) {
+    for (const href of htmlDiff.extractHrefs(html)) {
+      const rel = htmlDiff.resolveCrawlRelPath(href, pageUrl, baseUrl);
+      if (!rel) continue;
+      if (localPathSet.has(rel) || foundRelPathSet.has(rel) || queued.has(rel)) continue;
+      queued.add(rel);
+      queue.push(rel);
+    }
+  }
+
+  for (const seed of seedTexts) {
+    enqueueFromHtml(seed.text, htmlDiff.joinUrl(baseUrl, seed.relPath));
+  }
+  try {
+    const baseHtml = await fetchRemoteText(baseUrl, authHeader);
+    enqueueFromHtml(baseHtml, baseUrl);
+  } catch (e) {
+    // baseUrl自体が取得できなくても、既知ページのリンクだけで探索を続ける
+  }
+
+  while (queue.length > 0) {
+    if (fetchCount >= crawlLimit) {
+      limitReached = true;
+      break;
+    }
+    const remaining = crawlLimit - fetchCount;
+    const batch = queue.splice(0, Math.min(CONCURRENCY, remaining));
+    fetchCount += batch.length;
+
+    const results = await runPool(batch, CONCURRENCY, async (rel) => {
+      const url = htmlDiff.joinUrl(baseUrl, rel);
+      try {
+        const text = await fetchRemoteText(url, authHeader);
+        return { rel, url, text };
+      } catch (e) {
+        return null; // 404等の失敗はノイズにしないため黙って除外
+      }
+    });
+
+    for (const r of results) {
+      if (!r) continue;
+      foundRelPathSet.add(r.rel);
+      newPages.push(r);
+      enqueueFromHtml(r.text, r.url);
+    }
+  }
+  if (queue.length > 0 && fetchCount >= crawlLimit) limitReached = true;
+
+  return { newPages, limitReached };
 }
 
 function buildAuthHeader(basicUser, basicPass) {
@@ -154,10 +264,11 @@ function buildComparedPage(relPath, localPath, url, localText, remoteText) {
 }
 
 // localRoot(+scope配下)を再帰走査して*.htmlを列挙し、公開サーバーの対応ページと比較する。
-// さらにsitemap.xmlからローカルに無いページ(server-only)を検出して一覧に加える。
-async function scanSite({ localRoot, baseUrl, basicUser, basicPass, scope }) {
+// さらにsitemap.xml(+robots.txt由来・sitemapindex対応)や、crawl:trueならリンククロールから
+// ローカルに無いページ(server-only)を検出して一覧に加える。
+async function scanSite({ localRoot, baseUrl, basicUser, basicPass, scope, crawl, crawlLimit }) {
   resetState();
-  lastScanParams = { localRoot, baseUrl, basicUser, basicPass, scope };
+  lastScanParams = { localRoot, baseUrl, basicUser, basicPass, scope, crawl, crawlLimit };
 
   const authHeader = buildAuthHeader(basicUser, basicPass);
   const normalizedScope = scope ? scope.replace(/^[\\/]+/, '').replace(/[\\/]+$/, '') : '';
@@ -185,33 +296,82 @@ async function scanSite({ localRoot, baseUrl, basicUser, basicPass, scope }) {
     }
   });
 
-  // sitemap.xmlによる新規ページ検出
-  let sitemapNote = '';
+  const localPathSet = new Set(pages.map((p) => p.relPath));
+  // sitemap・クロールの両方を通じて既に発見済みのrelPath(重複検出防止に共用する)
+  const foundRelPathSet = new Set();
+
+  // sitemap.xml(robots.txt由来の候補・sitemapindex対応)による新規ページ検出
+  let sitemapNewCount = 0;
+  let sitemapUnavailable = false;
+  let sitemapError = false;
   try {
     const locs = await fetchSitemapLocs(baseUrl, authHeader);
     if (locs) {
-      const localPathSet = new Set(pages.map((p) => p.relPath));
-      const seen = new Set();
       for (const loc of locs) {
         const rel = htmlDiff.sitemapUrlToRelPath(loc, baseUrl);
-        if (!rel || seen.has(rel) || localPathSet.has(rel)) continue;
-        seen.add(rel);
+        if (!rel || foundRelPathSet.has(rel) || localPathSet.has(rel)) continue;
+        foundRelPathSet.add(rel);
         const url = htmlDiff.joinUrl(baseUrl, rel);
         try {
           const remoteText = await fetchRemoteText(url, authHeader);
           remoteTextMap.set(rel, remoteText);
           const localPath = path.join(localRoot, ...rel.split('/'));
           pages.push(makePage(rel, localPath, url, 'server-only'));
+          sitemapNewCount++;
         } catch (e) {
           // 新規ページの取得に失敗した場合は一覧に含めない(サーバー側のエラーとして黙って除外する)
         }
       }
     } else {
-      sitemapNote = 'sitemap.xml が見つからないため、新規ページの検出はスキップしました。';
+      sitemapUnavailable = true;
     }
   } catch (e) {
-    sitemapNote = 'sitemap.xml の確認中にエラーが発生したため、新規ページの検出はスキップしました。';
+    sitemapError = true;
   }
+
+  // リンククロールによる新規ページ検出(オプション、crawl:trueの場合のみ)
+  let crawlNewCount = 0;
+  let crawlLimitReached = false;
+  if (crawl) {
+    try {
+      const seedTexts = Array.from(remoteTextMap.entries()).map(([relPath, text]) => ({ relPath, text }));
+      const { newPages, limitReached } = await crawlForNewPages({
+        baseUrl,
+        authHeader,
+        localPathSet,
+        foundRelPathSet,
+        seedTexts,
+        crawlLimit: crawlLimit || CRAWL_DEFAULT_LIMIT,
+      });
+      crawlLimitReached = limitReached;
+      for (const p of newPages) {
+        remoteTextMap.set(p.rel, p.text);
+        const localPath = path.join(localRoot, ...p.rel.split('/'));
+        pages.push(makePage(p.rel, localPath, p.url, 'server-only'));
+        crawlNewCount++;
+      }
+    } catch (e) {
+      // クロール全体の予期しない失敗は、それまでに見つかった分を活かして黙って打ち切る
+    }
+  }
+
+  // noteの組み立て: sitemap未検出/エラーの案内 + 検出手段別の件数内訳 + 上限到達の案内
+  const noteParts = [];
+  if (sitemapUnavailable) {
+    noteParts.push('sitemap.xml が見つからないため、sitemapからの新規ページ検出はスキップしました。');
+  } else if (sitemapError) {
+    noteParts.push('sitemap.xml の確認中にエラーが発生したため、sitemapからの新規ページ検出はスキップしました。');
+  }
+  if (sitemapNewCount > 0 || crawlNewCount > 0) {
+    const breakdown = [];
+    if (sitemapNewCount > 0) breakdown.push(`sitemapから${sitemapNewCount}件`);
+    if (crawlNewCount > 0) breakdown.push(`リンククロールから${crawlNewCount}件`);
+    noteParts.push(`新規ページ: ${breakdown.join('、')}`);
+  }
+  if (crawlLimitReached) {
+    noteParts.push(`リンククロールの取得上限(${crawlLimit || CRAWL_DEFAULT_LIMIT}件)に達したため、途中で打ち切りました。`);
+  }
+  const sitemapNote = noteParts.join(' ');
 
   pages.sort((a, b) => a.relPath.localeCompare(b.relPath));
   lastPages = pages;
@@ -307,7 +467,10 @@ module.exports = {
   walkHtmlFiles,
   runPool,
   fetchRemoteText,
+  fetchRobotsSitemaps,
+  fetchSitemapLocsFromXml,
   fetchSitemapLocs,
+  crawlForNewPages,
   scanSite,
   syncPage,
   syncAll,

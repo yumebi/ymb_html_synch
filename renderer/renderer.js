@@ -133,6 +133,17 @@ el('pickLocalRoot').addEventListener('click', async () => {
   if (p) el('localRoot').value = p;
 });
 
+// --- リンククロール(新規ページ探索)のON/OFFを記憶する。デフォルトはON。 ---
+const CRAWL_LINKS_KEY = 'ymb-html-sync-crawl-links';
+function restoreCrawlLinks() {
+  const saved = localStorage.getItem(CRAWL_LINKS_KEY);
+  el('crawlLinks').checked = saved === null ? true : saved === 'true';
+}
+restoreCrawlLinks();
+el('crawlLinks').addEventListener('change', (e) => {
+  localStorage.setItem(CRAWL_LINKS_KEY, e.target.checked ? 'true' : 'false');
+});
+
 // --- スキャン実行 ---
 function updateSyncAllBtn() {
   const btn = el('syncAllBtn');
@@ -153,6 +164,7 @@ el('runScan').addEventListener('click', async () => {
   const basicUser = el('basicUser').value.trim();
   const basicPass = el('basicPass').value;
   const scope = el('scope').value.trim();
+  const crawl = el('crawlLinks').checked;
 
   if (!localRoot || !baseUrl) {
     el('scanStatus').textContent = 'ローカルHTMLルートと公開サーバーURLを指定してください';
@@ -164,7 +176,7 @@ el('runScan').addEventListener('click', async () => {
   el('runScan').disabled = true;
 
   try {
-    const res = await window.api.scan({ localRoot, baseUrl, basicUser, basicPass, scope });
+    const res = await window.api.scan({ localRoot, baseUrl, basicUser, basicPass, scope, crawl });
     if (!res.ok) {
       el('scanStatus').textContent = `エラー: ${res.error}`;
       return;

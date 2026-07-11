@@ -83,9 +83,9 @@ ipcMain.handle('select-folder', async (_evt, defaultPath) => {
 
 // ローカルHTMLフォルダと公開サーバーを比較する。コア処理はsrc/core/htmlSync.jsに分離済み
 // (Electronを起動せずNodeから直接テストできるようにするため)。
-ipcMain.handle('scan', async (_evt, { localRoot, baseUrl, basicUser, basicPass, scope }) => {
+ipcMain.handle('scan', async (_evt, { localRoot, baseUrl, basicUser, basicPass, scope, crawl }) => {
   try {
-    const { pages, sitemapNote } = await htmlSync.scanSite({ localRoot, baseUrl, basicUser, basicPass, scope });
+    const { pages, sitemapNote } = await htmlSync.scanSite({ localRoot, baseUrl, basicUser, basicPass, scope, crawl });
     return { ok: true, pages, sitemapNote };
   } catch (e) {
     return { ok: false, error: e.message };

@@ -149,6 +149,56 @@ function sitemapUrlToRelPath(locUrl, baseUrl) {
   return rel;
 }
 
+// HTML文字列から<a href="...">のhref値を全部抜き出す(href='...'/href="..."両対応、大文字小文字無視)。
+function extractHrefs(html) {
+  const hrefs = [];
+  const re = /href\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const href = m[1] !== undefined ? m[1] : m[2];
+    if (href) hrefs.push(href);
+  }
+  return hrefs;
+}
+
+// リンククロール用: hrefをpageUrl基準で解決し、baseUrl配下のローカル相対パスに変換する。
+// mailto:/tel:/javascript:、外部オリジン、baseUrl配下でないパスはnullを返す。
+// フラグメント(#)・クエリ(?)はURL解決の時点で自動的に無視される(pathnameのみ使うため)。
+// 末尾'/' -> 'index.html'補完、'.html'終わり -> そのまま、拡張子無し -> '/index.html'補完、
+// それ以外の拡張子(.jpg/.css/.js/.pdf等) -> null(対象外)。
+function resolveCrawlRelPath(href, pageUrl, baseUrl) {
+  const trimmed = String(href || '').trim();
+  if (!trimmed) return null;
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith('mailto:') || lower.startsWith('tel:') || lower.startsWith('javascript:')) return null;
+
+  let resolved;
+  let base;
+  try {
+    resolved = new URL(trimmed, pageUrl);
+    base = new URL(baseUrl);
+  } catch (e) {
+    return null;
+  }
+  if (resolved.origin !== base.origin) return null;
+
+  let basePath = base.pathname;
+  if (!basePath.endsWith('/')) basePath += '/';
+  if (!resolved.pathname.startsWith(basePath)) return null;
+
+  let rel = resolved.pathname.slice(basePath.length);
+  if (rel === '' || rel.endsWith('/')) {
+    rel += 'index.html';
+  } else if (rel.toLowerCase().endsWith('.html')) {
+    // そのまま
+  } else if (/\.[a-z0-9]+$/i.test(rel)) {
+    return null; // .html以外の拡張子は対象外
+  } else {
+    rel += '/index.html';
+  }
+  return rel;
+}
+
 // HTMLへの差し込み用エスケープ(XSS対策)。
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (ch) => {
@@ -173,5 +223,7 @@ module.exports = {
   comparePages,
   joinUrl,
   sitemapUrlToRelPath,
+  extractHrefs,
+  resolveCrawlRelPath,
   escapeHtml,
 };
