@@ -1,7 +1,7 @@
 {
   "name": "ymb-html-sync",
   "productName": "YMB HTML差分同期ツール",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "ローカルHTMLフォルダと公開サーバー上のHTMLの差分を確認し、サーバー版でローカルを上書き同期するツール",
   "main": "main.js",
   "private": true,
