@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>YMB HTML差分同期ツール</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="toolbar">
+    <div class="field">
+      <label>ローカルHTMLルート</label>
+      <input id="localRoot" type="text" placeholder="例: C:\projects\sample-site\dist">
+      <button id="pickLocalRoot">選択…</button>
+    </div>
+    <div class="field">
+      <label>公開サーバーURL</label>
+      <input id="baseUrl" type="text" placeholder="例: https://www.example.com/site">
+    </div>
+    <div class="field">
+      <label>Basic認証(必要な場合のみ)</label>
+      <input id="basicUser" type="text" placeholder="ユーザー名">
+      <input id="basicPass" type="password" placeholder="パスワード">
+    </div>
+    <div class="field">
+      <label>対象サブディレクトリ(空欄=全体)</label>
+      <input id="scope" type="text" placeholder="ABOUT">
+    </div>
+    <button id="runScan" class="primary">スキャン実行</button>
+    <div class="field checkbox-field">
+      <label><input type="checkbox" id="includeNew"> 新規ページも取り込む</label>
+    </div>
+    <button id="syncAllBtn" disabled>差分ページ全部をサーバー版で上書き</button>
+    <span id="scanStatus" class="status"></span>
+  </header>
+
+  <main class="layout">
+    <section class="page-list" id="pageList">
+      <table>
+        <thead>
+          <tr><th>ページ</th><th>状態</th></tr>
+        </thead>
+        <tbody id="pageListBody"></tbody>
+      </table>
+    </section>
+
+    <div class="splitter" id="splitter" title="ドラッグで幅を調整(ダブルクリックでリセット)"></div>
+
+    <section class="detail" id="detail">
+      <p class="placeholder">左の一覧からページを選択してください。</p>
+    </section>
+  </main>
+
+  <footer class="appbar">
+    <span id="versionInfo" class="version"></span>
+    <button id="checkUpdateBtn">最新バージョン確認</button>
+    <span id="updateResult" class="status"></span>
+    <label class="theme-toggle">
+      <input type="checkbox" id="themeToggle">
+      ダークモード
+    </label>
+  </footer>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+{
+  "name": "ymb-html-sync",
+  "productName": "YMB HTML差分同期ツール",
+  "version": "1.0.0",
+  "description": "ローカルHTMLフォルダと公開サーバー上のHTMLの差分を確認し、サーバー版でローカルを上書き同期するツール",
+  "main": "main.js",
+  "private": true,
+  "author": "ymb",
+  "license": "MIT",
+  "homepage": "https://github.com/yumebi/ymb_html_synch",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yumebi/ymb_html_synch.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "build-icons": "node scripts/build-icons.js",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac"
+  },
+  "devDependencies": {
+    "electron": "^42.0.0",
+    "electron-builder": "^26.0.0",
+    "png2icons": "^2.0.1",
+    "sharp": "^0.35.2"
+  },
+  "build": {
+    "appId": "com.ymb.ymb-html-sync",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}
