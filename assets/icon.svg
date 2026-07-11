@@ -1,9 +1,17 @@
 <svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
   <rect x="8" y="8" width="240" height="240" rx="48" fill="#1f2430"/>
-  <path d="M104,84 L66,128 L104,172" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M152,84 L190,128 L152,172" fill="none" stroke="#ffffff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
-  <line x1="120" y1="180" x2="148" y2="76" stroke="#ffffff" stroke-width="14" stroke-linecap="round"/>
-  <circle cx="196" cy="196" r="42" fill="#1d6fa5"/>
-  <path d="M212,196 A16,16 0 1 1 182,184" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round"/>
-  <polygon points="178,182 195,180 187,197" fill="#ffffff"/>
+  <!-- back document (offset down-right) -->
+  <rect x="100" y="70" width="92" height="120" rx="10" fill="#ffffff" opacity="0.5"/>
+  <!-- front document (offset up-left) -->
+  <rect x="64" y="54" width="92" height="120" rx="10" fill="#ffffff"/>
+  <!-- text lines on front document -->
+  <line x1="82" y1="86" x2="140" y2="86" stroke="#1f2430" stroke-width="8" stroke-linecap="round"/>
+  <line x1="82" y1="110" x2="140" y2="110" stroke="#1f2430" stroke-width="8" stroke-linecap="round"/>
+  <line x1="82" y1="134" x2="122" y2="134" stroke="#1f2430" stroke-width="8" stroke-linecap="round"/>
+  <!-- sync badge, bottom-right -->
+  <circle cx="188" cy="188" r="44" fill="#1d6fa5"/>
+  <g transform="translate(154,154) scale(2.7)" fill="#ffffff">
+    <path d="M12,4V1L8,5l4,4V6c3.3,0,6,2.7,6,6c0,1-0.25,1.97-0.7,2.8l1.46,1.46C19.54,15,20,13.57,20,12C20,7.58,16.42,4,12,4z"/>
+    <path d="M12,18c-3.3,0-6-2.7-6-6c0-1,0.25-1.97,0.7-2.8L5.24,7.74C4.46,8.97,4,10.43,4,12c0,4.42,3.58,8,8,8v3l4-4l-4-4V18z"/>
+  </g>
 </svg>
