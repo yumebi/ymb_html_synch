@@ -1,0 +1,123 @@
+/* ============================================================
+   YMB 共通デザイントークン (Web / Electron 系)
+   ------------------------------------------------------------
+   正本: ymb-ui/ymb-base.css
+   各アプリはこのファイルを renderer/ 配下にコピーし、
+   index.html で style.css より前に読み込む。
+   アプリ固有のCSSは、生の色値ではなく必ず var(--ymb-*) を参照する。
+
+   対象プラットフォームは Windows のみ。
+   macOS 用フォント指定 (-apple-system / Hiragino) は入れない。
+   ============================================================ */
+
+:root {
+  /* --- ブランド --- */
+  --ymb-accent:        #c3002f;
+  --ymb-accent-hover:  #e0103f;
+  --ymb-accent-fg:     #ffffff;
+  /* アクセントの淡色。選択行やハイライトの地色に使う。 */
+  --ymb-accent-tint:   #fde8ec;
+
+  /* --- 面 (ライト) --- */
+  --ymb-bg:            #f5f6f8;
+  --ymb-surface:       #ffffff;
+  --ymb-surface-alt:   #f7f7f7;
+  --ymb-border:        #dddddd;
+  --ymb-border-soft:   #eeeeee;
+  --ymb-row-hover:     #f8f8f8;
+
+  /* --- 文字 (ライト) --- */
+  --ymb-fg:            #222222;
+  --ymb-fg-dim:        #555555;
+  --ymb-fg-muted:      #777777;
+
+  /* --- ツールバー (常に暗色。ライトテーマでも暗いまま) ---
+     地が常に暗いので、ここに載せる色はテーマで切り替えてはいけない。
+     --ymb-warning などライト時に暗くなるトークンを流用すると読めなくなる。 */
+  --ymb-toolbar-bg:     #1f2430;
+  --ymb-toolbar-fg:     #eeeeee;
+  --ymb-toolbar-label:  #aab2c5;
+  --ymb-toolbar-status: #ffd166;
+  --ymb-toolbar-input-bg:      #2a3040;
+  --ymb-toolbar-input-border:  #3a4156;
+  --ymb-toolbar-btn-bg:        #353c4d;
+  --ymb-toolbar-btn-bg-hover:  #424a5e;
+
+  /* --- 意味色 (ライト) ---
+     danger はアクセント赤と色相が近い。区別は「塗り=主要操作 /
+     枠線のみ=破壊的操作」というスタイルで付ける。色だけに頼らない。 */
+  --ymb-danger:        #c0392b;
+  --ymb-good:          #1d7a32;
+  --ymb-warning:       #a06800;
+  --ymb-link:          #0b5ed7;
+
+  /* --- 差分表示 (ライト) --- */
+  --ymb-diff-add-bg:   #d9f4dd;
+  --ymb-diff-add-fg:   #14532b;
+  --ymb-diff-del-bg:   #fbdada;
+  --ymb-diff-del-fg:   #7f1414;
+
+  /* --- 文字組み --- */
+  --ymb-font:      "Segoe UI", "Yu Gothic UI", "Meiryo", sans-serif;
+  --ymb-font-mono: "Cascadia Mono", "Consolas", monospace;
+  --ymb-fs-h1:     18px;
+  --ymb-fs-base:   13px;
+  --ymb-fs-label:  12px;
+  --ymb-fs-small:  11px;
+
+  /* --- 形 --- */
+  --ymb-radius-sm: 4px;   /* ボタン・入力欄 */
+  --ymb-radius-md: 6px;   /* パネル・カード */
+
+  /* --- 余白 --- */
+  --ymb-space-xs:  4px;
+  --ymb-space-sm:  6px;
+  --ymb-space-md:  8px;
+  --ymb-space-lg:  12px;
+  --ymb-space-xl:  20px;
+}
+
+/* ダークテーマ。既存アプリが body.dark を使っているため両対応にする。 */
+body.dark,
+:root[data-theme="dark"] {
+  --ymb-accent-tint:   #3a1e24;
+
+  --ymb-bg:            #1e1e1e;
+  --ymb-surface:       #2d2d30;
+  --ymb-surface-alt:   #252528;
+  --ymb-border:        #3a3a40;
+  --ymb-border-soft:   #2a2a2e;
+  --ymb-row-hover:     #33333a;
+
+  --ymb-fg:            #eaeaea;
+  --ymb-fg-dim:        #9a9aa4;
+  --ymb-fg-muted:      #888888;
+
+  --ymb-danger:        #ff6b6b;
+  --ymb-good:          #4caf50;
+  --ymb-warning:       #e0a800;
+  --ymb-link:          #4fc1ff;
+
+  --ymb-diff-add-bg:   #1c4029;
+  --ymb-diff-add-fg:   #8fe3a6;
+  --ymb-diff-del-bg:   #4a1f22;
+  --ymb-diff-del-fg:   #f0a3a8;
+}
+
+/* prefers-color-scheme による自動追従は入れない。
+   各アプリはテーマを明示制御している (body.dark クラス、または常時ライト)。
+   OS設定に勝手に追従させると、保存済みのテーマ設定と食い違って
+   「トークンは暗色・body.dark は未設定」という半端な状態になる。 */
+
+/* ============================================================
+   最小の土台。ここから先のレイアウトは各アプリの style.css で。
+   ============================================================ */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--ymb-font);
+  font-size: var(--ymb-fs-base);
+  color: var(--ymb-fg);
+  background: var(--ymb-bg);
+}
