@@ -1,0 +1,56 @@
+name: Design tokens
+
+# YMB共通デザイントークンは ymb-ui リポジトリが正本で、ここにあるのはコピー。
+# 直接編集すると他のYMBアプリと配色がずれていくため、配布時に置かれた
+# ハッシュ表と照合して検知する。
+#
+# 直す手順: ymb-ui 側の tokens/ を編集し、./sync.sh で配り直す。
+# このリポジトリのコピーを手で書き換えないこと。
+
+on:
+  push:
+    paths:
+      - 'renderer/**'
+      - '.github/workflows/tokens.yml'
+  pull_request:
+    paths:
+      - 'renderer/**'
+      - '.github/workflows/tokens.yml'
+  workflow_dispatch: {}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verify distributed tokens match the recorded hashes
+        shell: bash
+        working-directory: renderer
+        run: |
+          manifest=.ymb-tokens.sha256
+          if [ ! -f "$manifest" ]; then
+            echo "::error::$manifest がない。ymb-ui の ./sync.sh で配布し直してください。"
+            exit 1
+          fi
+
+          fail=0
+          while read -r want file; do
+            [ -n "$want" ] || continue
+            if [ ! -f "$file" ]; then
+              echo "::error file=renderer/$file::トークンファイルが無い"
+              fail=1
+              continue
+            fi
+            # 行末の差でハッシュが変わらないよう CR を落として計算する
+            got=$(tr -d '\r' < "$file" | sha256sum | cut -d' ' -f1)
+            if [ "$want" != "$got" ]; then
+              echo "::error file=renderer/$file::正本からずれている。ymb-ui 側を直して ./sync.sh で配り直してください。"
+              fail=1
+            fi
+          done < "$manifest"
+
+          if [ "$fail" != "0" ]; then
+            exit 1
+          fi
+          echo "OK: 配布されたトークンは正本と一致している"
