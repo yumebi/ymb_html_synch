@@ -1,7 +1,7 @@
 {
   "name": "ymb-html-sync",
   "productName": "YMB HTML差分同期ツール",
-  "version": "1.0.5",
+  "version": "1.0.8",
   "description": "ローカルHTMLフォルダと公開サーバー上のHTMLの差分を確認し、サーバー版でローカルを上書き同期するツール",
   "main": "main.js",
   "private": true,
@@ -20,10 +20,10 @@
     "dist:mac": "electron-builder --mac"
   },
   "devDependencies": {
-    "electron": "^43.2.0",
-    "electron-builder": "^26.0.0",
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
     "png2icons": "^2.0.1",
-    "sharp": "^0.35.2"
+    "sharp": "^0.35.3"
   },
   "build": {
     "appId": "com.ymb.ymb-html-sync",
