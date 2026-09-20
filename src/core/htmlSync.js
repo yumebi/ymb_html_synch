@@ -16,6 +16,7 @@ const CONCURRENCY = 4;
 const CRAWL_DEFAULT_LIMIT = 200; // リンククロールで新たにfetchするページ数の上限
 const SITEMAPINDEX_MAX_CHILDREN = 10; // sitemapindexから辿る子sitemapの上限
 const SITEMAPINDEX_MAX_DEPTH = 3; // 子sitemapがさらにsitemapindexだった場合の再帰上限
+const MAX_REMOTE_BYTES = 8 * 1024 * 1024; // リモートから取得する1レスポンスのサイズ上限
 
 // 直近のスキャンで取得したリモートテキストを保持する(relPath -> text)。
 // レンダラーへは表示用データ(hunks等)のみ渡し、巨大テキストの二重転送を避ける。
@@ -76,6 +77,7 @@ async function runPool(items, limit, worker) {
 }
 
 // リモートのテキストを取得する。Basic認証・タイムアウト(15秒)・エラー種別の判定を行う。
+// レスポンスサイズはMAX_REMOTE_BYTESまで(超過時はエラー)。
 async function fetchRemoteText(url, authHeader, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -91,7 +93,25 @@ async function fetchRemoteText(url, authHeader, timeoutMs = FETCH_TIMEOUT_MS) {
       err.status = res.status;
       throw err;
     }
-    return await res.text();
+    if (!res.body) return await res.text();
+    const contentLength = Number(res.headers.get('content-length') || 0);
+    if (contentLength > MAX_REMOTE_BYTES) {
+      throw new Error(`レスポンスが大きすぎます(${MAX_REMOTE_BYTES / (1024 * 1024)}MB上限)`);
+    }
+    const reader = res.body.getReader();
+    const chunks = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_REMOTE_BYTES) {
+        await reader.cancel();
+        throw new Error(`レスポンスが大きすぎます(${MAX_REMOTE_BYTES / (1024 * 1024)}MB上限)`);
+      }
+      chunks.push(value);
+    }
+    return Buffer.concat(chunks).toString('utf8');
   } catch (e) {
     if (e.name === 'AbortError') {
       throw new Error('タイムアウトしました(15秒以内に応答がありませんでした)');
@@ -99,6 +119,16 @@ async function fetchRemoteText(url, authHeader, timeoutMs = FETCH_TIMEOUT_MS) {
     throw e;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+// 2つのURLが同一オリジン(scheme+host+port)かどうかを判定する。不正なURLはfalse。
+// SSRF対策と、Basic認証情報を外部オリジンへ送らないための判定に使う。
+function isSameOrigin(urlStr, referenceUrl) {
+  try {
+    return new URL(urlStr).origin === new URL(referenceUrl).origin;
+  } catch (e) {
+    return false;
   }
 }
 
@@ -123,21 +153,24 @@ async function fetchRobotsSitemaps(origin, authHeader) {
 // sitemap XMLを1件取得して<loc>一覧を返す。<sitemapindex>形式の場合は子sitemapを
 // 順に辿って(最大SITEMAPINDEX_MAX_CHILDREN個、再帰深さSITEMAPINDEX_MAX_DEPTHまで)
 // 集約した<loc>一覧を返す。子sitemapの取得失敗は無視して他の子を続行する。
-async function fetchSitemapLocsFromXml(url, authHeader, depth = 0) {
+// SSRF対策として、<loc>・子sitemapのURLはrootOrigin (呼び出し元の公開サーバー) と
+// 同一オリジンのものだけ採用し、Basic認証情報の外部送信も防ぐ。
+async function fetchSitemapLocsFromXml(url, authHeader, depth = 0, rootOrigin = null) {
   const text = await fetchRemoteText(url, authHeader, FETCH_TIMEOUT_MS);
+  const allowed = rootOrigin ?? url;
   const locs = [];
   const re = /<loc>(.*?)<\/loc>/gi;
   let m;
   while ((m = re.exec(text)) !== null) {
     const loc = m[1].trim();
-    if (loc) locs.push(loc);
+    if (loc && isSameOrigin(loc, allowed)) locs.push(loc);
   }
   if (/<sitemapindex[\s>]/i.test(text) && depth < SITEMAPINDEX_MAX_DEPTH) {
     const childUrls = locs.slice(0, SITEMAPINDEX_MAX_CHILDREN);
     const aggregated = [];
     for (const childUrl of childUrls) {
       try {
-        const childLocs = await fetchSitemapLocsFromXml(childUrl, authHeader, depth + 1);
+        const childLocs = await fetchSitemapLocsFromXml(childUrl, authHeader, depth + 1, allowed);
         aggregated.push(...childLocs);
       } catch (e) {
         // 子sitemapの取得失敗は無視して他の子を続行する
@@ -167,7 +200,7 @@ async function fetchSitemapLocs(baseUrl, authHeader) {
   ]));
   for (const url of candidates) {
     try {
-      return await fetchSitemapLocsFromXml(url, authHeader);
+      return await fetchSitemapLocsFromXml(url, authHeader, 0, origin);
     } catch (e) {
       // 次の候補を試す
     }
@@ -243,6 +276,41 @@ function buildAuthHeader(basicUser, basicPass) {
     : null;
 }
 
+// Basic認証で資格情報を送る場合、HTTPS(またはローカルホスト)に限定する。
+// 平文HTTPへの資格情報送信を防ぐ。
+function isSecureTransport(baseUrl) {
+  let u;
+  try {
+    u = new URL(baseUrl);
+  } catch (e) {
+    return false;
+  }
+  if (u.protocol === 'https:') return true;
+  const host = u.hostname.toLowerCase();
+  return u.protocol === 'http:' &&
+    (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '0:0:0:0:0:0:0:1');
+}
+
+// scopeを安全な相対パスに正規化する。親ディレクトリ参照('..')やローカルルート外を
+// 参照するパスは拒否し、ローカルルート配下に限定する。
+function sanitizeScope(scope, localRoot) {
+  if (!scope) return '';
+  const cleaned = scope.replace(/^[\\/]+/, '').replace(/[\\/]+$/, '');
+  if (!cleaned) return '';
+  const rawParts = cleaned.split(/[\\/]+/).filter((s) => s);
+  if (rawParts.some((s) => s === '..')) {
+    throw new Error('対象サブディレクトリに親ディレクトリ参照(..)は指定できません');
+  }
+  const parts = rawParts.filter((s) => s !== '.');
+  if (parts.length === 0) return '';
+  const resolved = path.resolve(localRoot, ...parts);
+  const rootAbs = path.resolve(localRoot);
+  if (resolved !== rootAbs && !resolved.startsWith(rootAbs + path.sep)) {
+    throw new Error('対象サブディレクトリにローカルルート外を参照するパスは指定できません');
+  }
+  return parts.join('/');
+}
+
 function makePage(relPath, localPath, url, status, extra = {}) {
   return { relPath, localPath, url, status, ...extra };
 }
@@ -270,8 +338,21 @@ async function scanSite({ localRoot, baseUrl, basicUser, basicPass, scope, crawl
   resetState();
   lastScanParams = { localRoot, baseUrl, basicUser, basicPass, scope, crawl, crawlLimit };
 
+  // 公開サーバーURLは http/https のみ許可する。
+  let parsedBase;
+  try {
+    parsedBase = new URL(baseUrl);
+    if (parsedBase.protocol !== 'http:' && parsedBase.protocol !== 'https:') throw new Error();
+  } catch (e) {
+    throw new Error('公開サーバーURLは http:// または https:// で始まるURLを指定してください');
+  }
+  // Basic認証を使う場合はHTTPS(またはローカルホスト)を強制する。
+  if ((basicUser || basicPass) && !isSecureTransport(baseUrl)) {
+    throw new Error('Basic認証を使う場合はHTTPS(またはローカルホスト)のサーバーを指定してください');
+  }
+
   const authHeader = buildAuthHeader(basicUser, basicPass);
-  const normalizedScope = scope ? scope.replace(/^[\\/]+/, '').replace(/[\\/]+$/, '') : '';
+  const normalizedScope = sanitizeScope(scope, localRoot);
   const scopeUrlPrefix = normalizedScope ? normalizedScope.split(/[\\/]+/).join('/') : '';
   const startDir = normalizedScope ? path.join(localRoot, normalizedScope) : localRoot;
 
