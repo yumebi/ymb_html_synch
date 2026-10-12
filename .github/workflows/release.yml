@@ -50,6 +50,7 @@ jobs:
         run: npx electron-builder --mac --publish never
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 1
           name: dist-${{ matrix.os }}
           path: |
             dist/*.exe
