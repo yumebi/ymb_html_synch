@@ -19,6 +19,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # ウインドウ位置の補正などのテスト。バージョン更新の前に実行する。
+      - name: Test
+        run: npm test
       - id: bump
         run: echo "version=$(node scripts/bump-version.js)" >> "$GITHUB_OUTPUT"
       - id: commit
