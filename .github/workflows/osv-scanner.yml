@@ -1,0 +1,31 @@
+name: OSV Scanner
+
+# 依存ライブラリ(lockfile / csproj など)の既知の脆弱性を、OSV データベースと照合して検査する。
+# 見つかるとこのワークフローが失敗する(リリース用のワークフローとは独立なので、リリースは止めない)。
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # 毎週月曜 10:00 JST。コードを変えなくても、新しく公開された脆弱性を拾うため
+    - cron: "0 1 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  osv-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run OSV-Scanner
+        uses: google/osv-scanner-action/osv-scanner-action@7f58dd6750d78fc29a900ba64b1a0f946f62fba4 # v2.6.0
+        with:
+          scan-args: |-
+            --recursive
+            ./
