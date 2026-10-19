@@ -16,7 +16,7 @@ jobs:
       sha: ${{ steps.commit.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
       # ウインドウ位置の補正などのテスト。バージョン更新の前に実行する。
@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.bump-version.outputs.sha }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
       - run: npm ci --ignore-scripts
