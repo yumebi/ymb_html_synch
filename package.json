@@ -21,7 +21,7 @@
     "test": "node --test \"test/*.test.js\""
   },
   "devDependencies": {
-    "electron": "^44.5.1",
+    "electron": "^44.9.3",
     "electron-builder": "^26.15.3",
     "png2icons": "^2.0.1",
     "sharp": "^0.35.3"
