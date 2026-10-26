@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "electron": "^44.9.3",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "^26.17.0",
     "png2icons": "^2.0.1",
     "sharp": "^0.35.3"
   },
