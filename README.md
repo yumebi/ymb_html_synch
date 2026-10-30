@@ -37,10 +37,10 @@ npm start
 
 | 用途 | ライブラリ/ツール |
 |---|---|
-| フレームワーク | [Electron](https://www.electronjs.org/) v43 |
+| フレームワーク | [Electron](https://www.electronjs.org/) v44(Chromium 152 / Node.js 24) |
 | 差分計算 | 自前実装(LCSベース、追加ライブラリ不要) |
 | ビルドツール | [electron-builder](https://www.electron.build/) v26 |
-| CI/CD | GitHub Actions |
+| CI/CD | GitHub Actions(脆弱性検査は OSV-Scanner、依存の更新は Dependabot) |
 
 ## インストーラーのビルド
 
@@ -49,6 +49,14 @@ npm run build-icons   # アイコン生成(初回・アイコン変更時)
 npm run dist:win       # Windows向け(nsisインストーラー)
 npm run dist:mac       # macOS向け(dmg)
 ```
+
+## セキュリティと依存関係の更新
+
+- **脆弱性の検査**: 依存ライブラリの既知の脆弱性を、[OSV-Scanner](https://google.github.io/osv-scanner/) で、push・プルリクエスト・毎週月曜(10:00 JST)に自動で検査します(`.github/workflows/osv-scanner.yml`)。見つかるとこのワークフローが失敗します(リリースのワークフローとは独立で、リリースは止めません)。
+- **更新の提案**: [Dependabot](https://docs.github.com/ja/code-security/dependabot) が、毎週月曜に依存の更新をプルリクエストで提案します(`.github/dependabot.yml`)。公開から 14 日未満のバージョンは対象にしません(供給網攻撃への備え)。
+- **npm の追加の備え**: `.npmrc` の `min-release-age=14` で、npm も公開から 14 日未満のバージョンを解決しません。
+- **緊急の修正**: 実際に影響のある脆弱性の修正など、緊急性が高いものは、14 日未満でもすぐに取り込みます。
+- **失敗が残る場合**: 修正版がない、または上流(開発用の依存を含む Electron や electron-builder)の更新待ちの検出は、検査が失敗のまま残ることがあります。
 
 ## ダウンロード
 
