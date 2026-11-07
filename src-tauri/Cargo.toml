@@ -1,0 +1,27 @@
+[package]
+name = "ymb-html-sync"
+version = "1.2.1"
+description = "ローカルHTMLフォルダと公開サーバー上のHTMLの差分を確認し、サーバー版でローカルを上書き同期するツール"
+authors = ["ymb"]
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "ymb_html_sync_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-window-state = "2"
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.13", features = ["rustls"], default-features = false }
+
+[dev-dependencies]
+tempfile = "3"

@@ -17,9 +17,11 @@ EJSのようなテンプレート処理は一切行わず、HTMLファイルを�
 
 ## 使い方(開発モードで起動)
 
+必要なもの: [Rust](https://rustup.rs/)(stable)、[Node.js](https://nodejs.org/) 22 以上、Windows は WebView2(Windows 11 では標準で入っています)。
+
 ```bash
 npm install
-npm start
+npm run dev
 ```
 
 起動したら、
@@ -37,26 +39,29 @@ npm start
 
 | 用途 | ライブラリ/ツール |
 |---|---|
-| フレームワーク | [Electron](https://www.electronjs.org/) v44(Chromium 152 / Node.js 24) |
-| 差分計算 | 自前実装(LCSベース、追加ライブラリ不要) |
-| ビルドツール | [electron-builder](https://www.electron.build/) v26 |
+| フレームワーク | [Tauri v2](https://v2.tauri.app/)(2.12 系)。画面は OS の WebView(Windows は WebView2、macOS は WKWebView) |
+| ファイル・通信 | Rust(reqwest + rustls)。ローカルのファイルは、選んだルートフォルダの中の相対パスでしか触れない。書き込みは、同じフォルダの一時ファイルに書いてから置き換える(途中で落ちても元のファイルが壊れない)。初回だけ `.bak` を残す |
+| 差分計算・走査の手順 | JavaScript の ES モジュール(`renderer/core/`)。自前実装(LCSベース、追加ライブラリ不要)。入出力は Rust のコマンドを呼ぶ形で、Node の単体テストでも動く |
+| 画面 | HTML / CSS / バニラ JavaScript(フレームワーク不使用) |
+| ビルドツール | Tauri CLI(インストーラーは約 3MB。以前の Electron 版は約 106MB) |
 | CI/CD | GitHub Actions(脆弱性検査は OSV-Scanner、依存の更新は Dependabot) |
 
 ## インストーラーのビルド
 
 ```bash
-npm run build-icons   # アイコン生成(初回・アイコン変更時)
-npm run dist:win       # Windows向け(nsisインストーラー)
-npm run dist:mac       # macOS向け(dmg)
+npm run build                 # 実行環境のOS向けのインストーラー(Windows は NSIS、macOS は dmg)
+npx tauri icon build/icon.png # アイコンを作り直すとき(初回・アイコン変更時)
 ```
+
+インストーラーは `src-tauri/target/release/bundle/` に出力されます。テストは `npm test`(JavaScript)と `cargo test --manifest-path src-tauri/Cargo.toml`(Rust)です。
 
 ## セキュリティと依存関係の更新
 
 - **脆弱性の検査**: 依存ライブラリの既知の脆弱性を、[OSV-Scanner](https://google.github.io/osv-scanner/) で、push・プルリクエスト・毎週月曜(10:00 JST)に自動で検査します(`.github/workflows/osv-scanner.yml`)。見つかるとこのワークフローが失敗します(リリースのワークフローとは独立で、リリースは止めません)。
 - **更新の提案**: [Dependabot](https://docs.github.com/ja/code-security/dependabot) が、毎週月曜に依存の更新をプルリクエストで提案します(`.github/dependabot.yml`)。公開から 14 日未満のバージョンは対象にしません(供給網攻撃への備え)。
-- **npm の追加の備え**: `.npmrc` の `min-release-age=14` で、npm も公開から 14 日未満のバージョンを解決しません。
+- **npm の追加の備え**: `.npmrc` の `min-release-age=14` で、npm も公開から 14 日未満のバージョンを解決しません(Rust の依存は、Dependabot の基準と、手動の確認で守ります)。
 - **緊急の修正**: 実際に影響のある脆弱性の修正など、緊急性が高いものは、14 日未満でもすぐに取り込みます。
-- **失敗が残る場合**: 修正版がない、または上流(開発用の依存を含む Electron や electron-builder)の更新待ちの検出は、検査が失敗のまま残ることがあります。
+- **失敗が残る場合**: 修正版がない、または上流(Tauri の内部依存の glib、zbus 系など。Linux 向けで、Windows のインストーラーには入りません)の更新待ちの検出は、`src-tauri/osv-scanner.toml` に理由と期限つきで書いて、無視しています。
 
 ## ダウンロード
 

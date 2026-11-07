@@ -13,6 +13,17 @@ updates:
     cooldown:
       default-days: 14
     open-pull-requests-limit: 5
+  - package-ecosystem: "cargo"
+    directory: "/src-tauri"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+      timezone: "Asia/Tokyo"
+    # 公開から14日未満のバージョンは提案しない(供給網攻撃への備え)
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 5
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

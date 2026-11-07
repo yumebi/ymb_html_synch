@@ -1,0 +1,33 @@
+# OSV-Scanner の無視設定。修正版がない、または上流(依存元)の更新待ちで、こちらでは直せない検出だけを、
+# 理由と期限つきで無視する。期限が来ると、再び検出されて失敗する(そのときに見直す)。
+# 新しい検出は、これまでどおり失敗する。
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0429"
+ignoreUntil = 2026-12-31
+reason = "glib 0.18 は Tauri が Linux(GTK3)用に使う内部依存。Windows 向けの配布物には入らない。Tauri 側の更新待ち"
+
+[[IgnoredVulns]]
+id = "GHSA-wrw7-89jp-8q8g"
+ignoreUntil = 2026-12-31
+reason = "RUSTSEC-2024-0429(glib)の別名。理由は同じ"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0370"
+ignoreUntil = 2026-12-31
+reason = "proc-macro-error は Tauri が使うビルド時のマクロ。修正版がなく、実行時には影響しない。Tauri 側の更新待ち"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0370"
+ignoreUntil = 2026-12-31
+reason = "zvariant は Linux の D-Bus 連携用の内部依存。Windows 向けの配布物には入らない。修正版なし"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0371"
+ignoreUntil = 2026-12-31
+reason = "zbus_names は Linux の D-Bus 連携用の内部依存。Windows 向けの配布物には入らない。修正版なし"
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0372"
+ignoreUntil = 2026-12-31
+reason = "zvariant_derive は Linux の D-Bus 連携用の内部依存。Windows 向けの配布物には入らない。修正版なし"

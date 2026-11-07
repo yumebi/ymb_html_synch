@@ -12,71 +12,103 @@ jobs:
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.bump.outputs.version }}
+      version: ${{ steps.next.outputs.version }}
       sha: ${{ steps.commit.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
+
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      # ウインドウ位置の補正などのテスト。バージョン更新の前に実行する。
+
+      - run: npm ci --ignore-scripts
+
+      # 差分・走査の手順(JavaScript)のテスト。バージョン更新の前に実行する。
       - name: Test
         run: npm test
-      - id: bump
-        run: echo "version=$(node scripts/bump-version.js)" >> "$GITHUB_OUTPUT"
+
+      - name: Compute next version (各桁9で繰り上げ)
+        id: next
+        run: |
+          node -e '
+            const fs = require("fs");
+            const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            let [major, minor, patch] = pkg.version.split(".").map(Number);
+            patch += 1;
+            if (patch > 9) { patch = 0; minor += 1; }
+            if (minor > 9) { minor = 0; major += 1; }
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, `version=${major}.${minor}.${patch}\n`);
+          '
+
+      - name: Bump package.json / package-lock.json
+        run: npm version ${{ steps.next.outputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Bump tauri.conf.json / Cargo.toml / Cargo.lock
+        run: |
+          node -e '
+            const fs = require("fs");
+            const next = process.argv[1];
+
+            const confPath = "src-tauri/tauri.conf.json";
+            fs.writeFileSync(confPath, fs.readFileSync(confPath, "utf8").replace(/"version":\s*"[^"]+"/, `"version": "${next}"`));
+
+            const tomlPath = "src-tauri/Cargo.toml";
+            fs.writeFileSync(tomlPath, fs.readFileSync(tomlPath, "utf8").replace(/^version = "[^"]+"/m, `version = "${next}"`));
+
+            const lockPath = "src-tauri/Cargo.lock";
+            fs.writeFileSync(lockPath, fs.readFileSync(lockPath, "utf8").replace(/(name = "ymb-html-sync"\nversion = ")[^"]+(")/, `$1${next}$2`));
+          ' ${{ steps.next.outputs.version }}
+
       - id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json
-          git commit -m "chore: bump version to v${{ steps.bump.outputs.version }} [skip ci]"
+          git add package.json package-lock.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+          git commit -m "chore: bump version to v${{ steps.next.outputs.version }} [skip ci]"
           git push
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-  build:
+  release:
     needs: bump-version
+    permissions:
+      contents: write
     strategy:
+      fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+          - platform: windows-latest
+            args: ""
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.bump-version.outputs.sha }}
+
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - run: npm ci --ignore-scripts
-      - if: matrix.os == 'windows-latest'
-        run: npx electron-builder --win --publish never
-      - if: matrix.os == 'macos-latest'
-        run: npx electron-builder --mac --publish never
-      - uses: actions/upload-artifact@v7
-        with:
-          retention-days: 1
-          name: dist-${{ matrix.os }}
-          path: |
-            dist/*.exe
-            dist/*.exe.blockmap
-            dist/*.dmg
-            dist/*.dmg.blockmap
-            dist/latest*.yml
-          if-no-files-found: ignore
 
-  release:
-    needs: [bump-version, build]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          ref: ${{ needs.bump-version.outputs.sha }}
-      - uses: actions/download-artifact@v8
-        with:
-          path: artifacts
-      - uses: softprops/action-gh-release@v3
-        with:
-          tag_name: v${{ needs.bump-version.outputs.version }}
-          target_commitish: ${{ needs.bump-version.outputs.sha }}
-          files: artifacts/**/*
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Install frontend dependencies
+        run: npm ci --ignore-scripts
+
+      # ファイル操作(ルートの外に出られないこと、原子的な書き込み、.bak)のテスト。
+      - name: Rust tests
+        if: matrix.platform == 'windows-latest'
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v${{ needs.bump-version.outputs.version }}
+          releaseName: "YMB HTML差分同期ツール v${{ needs.bump-version.outputs.version }}"
+          releaseBody: "YMB HTML差分同期ツール v${{ needs.bump-version.outputs.version }} のインストーラーです。"
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

@@ -1,9 +1,7 @@
-'use strict';
-
 /* =========================================================================
  * htmlDiff.js
  * ローカルHTMLと公開サーバー上のHTMLを比較するための純粋関数群。
- * DOM/Electronに依存しないため、Node環境でそのまま単体テスト可能。
+ * DOM/Electronに依存しないため、Node でも、ブラウザ(Tauri の画面)でも、そのまま動く(ES モジュール)。
  * 既存アプリ「YMB EJS差分同期ツール」の web/script.js からロジックを移植したもの。
  * ========================================================================= */
 
@@ -213,7 +211,7 @@ function escapeHtml(str) {
   });
 }
 
-module.exports = {
+export {
   diffArrays,
   mergeAdjacent,
   groupOps,
