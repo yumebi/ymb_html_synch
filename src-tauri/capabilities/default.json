@@ -7,9 +7,16 @@
   ],
   "permissions": [
     "core:default",
-    "opener:allow-open-url",
     "dialog:allow-open",
     "dialog:allow-ask",
-    "dialog:allow-message"
+    "dialog:allow-message",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://github.com/yumebi/ymb_html_synch/releases*"
+        }
+      ]
+    }
   ]
 }
