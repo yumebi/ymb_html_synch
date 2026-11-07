@@ -60,6 +60,20 @@
     },
   };
 
+  // 確認・警告のダイアログ。ブラウザ標準の confirm / alert は、macOS の WKWebView では動かないことがあるため、
+  // OS 標準のダイアログ(Tauri の dialog プラグイン)を使う。どの OS でも、同じように動く。
+  window.ymbDialog = {
+    confirm: (message) =>
+      window.__TAURI__.dialog.ask(message, {
+        title: 'YMB HTML差分同期ツール',
+        kind: 'warning',
+        okLabel: 'はい',
+        cancelLabel: 'いいえ',
+      }),
+    alert: (message) =>
+      window.__TAURI__.dialog.message(message, { title: 'YMB HTML差分同期ツール', kind: 'error' }),
+  };
+
   window.appInfo = {
     getVersion: () => invoke('app_version'),
     updateRepo: UPDATE_REPO,

@@ -210,7 +210,7 @@ el('syncAllBtn').addEventListener('click', async () => {
   const confirmMsg = includeNew
     ? `差分${diffCount}件・新規${newCount}件、合計${total}ページをサーバー版で上書き(または新規保存)します。よろしいですか?`
     : `差分のある${diffCount}ページをサーバー版で上書きします。よろしいですか?`;
-  if (!window.confirm(confirmMsg)) return;
+  if (!(await window.ymbDialog.confirm(confirmMsg))) return;
 
   el('scanStatus').textContent = '一括同期中…';
   try {
@@ -407,7 +407,7 @@ function bindSyncOneButton(detail, page, successMessage) {
     btn.disabled = true;
     const res = await window.api.syncPage(page.relPath);
     if (!res.ok) {
-      alert(`同期に失敗しました: ${res.error || ''}`);
+      await window.ymbDialog.alert(`同期に失敗しました: ${res.error || ''}`);
       btn.disabled = false;
       return;
     }
@@ -421,10 +421,10 @@ function bindRestoreButton(detail, page) {
   const btn = detail.querySelector('#restoreBackupBtn');
   if (!btn) return;
   btn.addEventListener('click', async () => {
-    if (!window.confirm(`${page.relPath} をバックアップ(.bak)から復元します。よろしいですか?`)) return;
+    if (!(await window.ymbDialog.confirm(`${page.relPath} をバックアップ(.bak)から復元します。よろしいですか?`))) return;
     const res = await window.api.restoreBackup(page.relPath);
     if (!res.ok) {
-      alert(`復元に失敗しました: ${res.error || ''}`);
+      await window.ymbDialog.alert(`復元に失敗しました: ${res.error || ''}`);
       return;
     }
     applyUpdatedPage(res.updatedPage);
