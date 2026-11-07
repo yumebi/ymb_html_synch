@@ -1,6 +1,6 @@
 [package]
 name = "ymb-html-sync"
-version = "1.2.2"
+version = "1.2.3"
 description = "ローカルHTMLフォルダと公開サーバー上のHTMLの差分を確認し、サーバー版でローカルを上書き同期するツール"
 authors = ["ymb"]
 edition = "2021"
